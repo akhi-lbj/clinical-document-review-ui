@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCode AI — Clinical Document Review &amp; Coding Workstation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="slate" data-variant="1" data-screen="submission">
+
+  <!-- TOP HEADER / CONTROL BAR -->
+  <header id="app-header" class="app-header">
+    <div class="header-left">
+      <div class="app-brand">
+        <div class="brand-crest" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L3 7v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7l-9-5z"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">MediCode AI Studio</span>
+          <span class="brand-sub">Clinical Document Ingestion &amp; Terminology Verification</span>
+        </div>
+      </div>
+      <div class="header-badge-group">
+        <span class="badge badge-env" id="env-badge">DEMO / STAGING</span>
+        <span class="badge badge-sec" title="Server-side tokens held, TLS 1.3, Zero PHI in Telemetry">
+          <span class="dot-pulse"></span> Viya SSO / OIDC Active
+        </span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <!-- SCREEN SWITCHER -->
+      <div class="screen-tabs" role="tablist" aria-label="Screen selector">
+        <button id="tab-screen-submission" class="screen-tab active" role="tab" aria-selected="true" onclick="switchScreen('submission')">
+          <span class="tab-step-num">Screen 1</span> Submission &amp; Pipeline
+        </button>
+        <button id="tab-screen-review" class="screen-tab" role="tab" aria-selected="false" onclick="switchScreen('review')">
+          <span class="tab-step-num">Screen 2</span> Review Workspace
+        </button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- 2 VARIANTS PICKER: VARIANT 1 & VARIANT 2 -->
+      <div class="variant-selector-wrapper">
+        <label for="variant-select" class="control-label">Design Variant:</label>
+        <select id="variant-select" class="variant-select" onchange="switchVariant(this.value)">
+          <option value="1" selected>Variant 1: Viya Classic Slate (Light)</option>
+          <option value="2">Variant 2: High-Acuity Dark Console</option>
+        </select>
+      </div>
+
+      <button id="btn-shortcuts-modal" class="btn-icon" title="View Keyboard Shortcuts (?)" onclick="openShortcutsModal()">
+        <span class="kbd-hint">?</span>
+      </button>
+
+      <div class="user-pill">
+        <div class="user-avatar">CA</div>
+        <div class="user-meta">
+          <span class="user-name">Clinical Auditor</span>
+          <span class="user-role">Lead Medical Reviewer</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- COMMON 5-STAGE PIPELINE STEPPER -->
+  <nav class="pipeline-stepper-container" aria-label="Workflow progress">
+    <div class="stepper-track">
+      <div class="step-card" id="step-card-upload" onclick="switchScreen('submission')" style="cursor: pointer;" title="Step 1: Upload (Staged)">
+        <div class="step-icon">1</div>
+        <div class="step-details">
+          <div class="step-title">1 Upload</div>
+          <div class="step-subtitle">1 PDF staged</div>
+        </div>
+        <div class="step-arrow" aria-hidden="true">→</div>
+      </div>
+
+      <div class="step-card" id="step-card-ocr" onclick="switchScreen('submission')" style="cursor: pointer;" title="Step 2: OCR (Queued)">
+        <div class="step-icon">2</div>
+        <div class="step-details">
+          <div class="step-title">2 OCR</div>
+          <div class="step-subtitle">SDA .flw</div>
+        </div>
+        <div class="step-arrow" aria-hidden="true">→</div>
+      </div>
+
+      <div class="step-card" id="step-card-extract" onclick="switchScreen('submission')" style="cursor: pointer;" title="Step 3: Extract (Queued)">
+        <div class="step-icon">3</div>
+        <div class="step-details">
+          <div class="step-title">3 Extract</div>
+          <div class="step-subtitle">HRR .flw</div>
+        </div>
+        <div class="step-arrow" aria-hidden="true">→</div>
+      </div>
+
+      <div class="step-card" id="step-card-code" onclick="switchScreen('submission')" style="cursor: pointer;" title="Step 4: Code (Queued)">
+        <div class="step-icon">4</div>
+        <div class="step-details">
+          <div class="step-title">4 Code</div>
+          <div class="step-subtitle">VLM .flw</div>
+        </div>
+        <div class="step-arrow" aria-hidden="true">→</div>
+      </div>
+
+      <div class="step-card" id="step-card-review" onclick="switchScreen('review')" style="cursor: pointer;" title="Step 5: Review (Awaiting Flow Execution)">
+        <div class="step-icon">5</div>
+        <div class="step-details">
+          <div class="step-title">5 Review</div>
+          <div class="step-subtitle" id="step-subtitle-review">2/4 Correct (1 pending)</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main id="main-content" class="main-content">
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: SUBMISSION & RUN MONITORING      -->
+    <!-- ========================================== -->
+    <section id="view-submission" class="view-screen" aria-labelledby="submission-title">
+      <div class="screen-headline-bar">
+        <div>
+          <h1 id="submission-title" class="screen-title">Submission and run-monitoring wireframe</h1>
+          <p class="screen-sub">Configuration is explicit, environment-aware, and validated before any flow starts.</p>
+        </div>
+        <div class="headline-badges">
+          <span class="badge badge-neutral">Correlation ID: #CID-8924-VIYA-SDA</span>
+          <span class="badge badge-success">✓ Zero PHI in Logs</span>
+        </div>
+      </div>
+
+      <div class="submission-grid">
+        <!-- LEFT: NEW SUBMISSION CARD -->
+        <div class="card submission-card">
+          <div class="card-header">
+            <h2 class="card-title">New submission</h2>
+            <span class="card-badge">Config ID: SUB-2026-CL-0842</span>
+          </div>
+
+          <!-- DROPZONE -->
+          <div class="form-group">
+            <label class="form-label">Input documents</label>
+            <div id="dropzone" class="dropzone" onclick="triggerFileSelect()">
+              <input type="file" id="file-input" style="display: none;" multiple accept=".pdf" onchange="handleFileSelect(event)">
+              <div class="dropzone-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <line x1="9" y1="15" x2="12" y2="12"/>
+                  <line x1="15" y1="15" x2="12" y2="12"/>
+                </svg>
+              </div>
+              <div class="dropzone-primary-text">Drop PDF files here or browse</div>
+              <div class="dropzone-secondary-text">Accepted: one or more PDFs • MIME validated • ClamAV scan required</div>
+              <div class="uploaded-pill" id="staged-file-pill">
+                <span class="file-icon">📄</span>
+                <span class="file-name">Discharge_Summary_Case1042.pdf (4.2 MB)</span>
+                <span class="file-status">✓ Virus Scan Passed</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SOURCE DIRECTORY -->
+          <div class="form-group">
+            <div class="label-with-meta">
+              <label for="input-source-dir" class="form-label">Source directory</label>
+              <span class="meta-tag">POSIX SAS NFS Mount</span>
+            </div>
+            <input type="text" id="input-source-dir" class="text-input font-mono" value="sasserver:/sda/submissions/{submission_id}/input" readonly>
+          </div>
+
+          <!-- OCR ENGINE RADIO CARDS -->
+          <div class="form-group">
+            <label class="form-label">OCR engine</label>
+            <div class="ocr-grid" role="radiogroup" aria-label="OCR Engine Selection">
+              <label class="ocr-card active">
+                <input type="radio" name="ocr-engine" value="ms-doc-ai" checked onchange="updateOcrEngine(this)">
+                <div class="ocr-card-body">
+                  <span class="ocr-name">Microsoft Document Intelligence</span>
+                  <span class="ocr-sub">High precision layout &amp; tables</span>
+                </div>
+              </label>
+
+              <label class="ocr-card">
+                <input type="radio" name="ocr-engine" value="aws-textract" onchange="updateOcrEngine(this)">
+                <div class="ocr-card-body">
+                  <span class="ocr-name">AWS Textract</span>
+                  <span class="ocr-sub">Multi-page asynchronous</span>
+                </div>
+              </label>
+
+              <label class="ocr-card">
+                <input type="radio" name="ocr-engine" value="paddle-ocr" onchange="updateOcrEngine(this)">
+                <div class="ocr-card-body">
+                  <span class="ocr-name">PaddleOCR</span>
+                  <span class="ocr-sub">Lightweight on-prem inference</span>
+                </div>
+              </label>
+
+              <label class="ocr-card">
+                <input type="radio" name="ocr-engine" value="vlm-model" onchange="updateOcrEngine(this)">
+                <div class="ocr-card-body">
+                  <span class="ocr-name">Vision Language Model</span>
+                  <span class="ocr-sub">Multimodal Med-VLM 4.2</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- LAUNCHER CONTEXT NAME & VALIDATION -->
+          <div class="form-group">
+            <label for="input-launcher-context" class="form-label">SAS launcher context name</label>
+            <div class="input-with-button">
+              <input type="text" id="input-launcher-context" class="text-input" value="SAS Document Analysis - VLM">
+              <button id="btn-validate-context" class="btn btn-navy" onclick="validateLauncherContext()">
+                Validate context
+              </button>
+            </div>
+            <div id="validation-feedback" class="feedback-msg success">
+              ✓ Context validated on Viya Kubernetes cluster (namespace: <code>sas-viya-clinical</code>)
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="footer-status-indicator">
+              <span class="dot-ok"></span> Pre-flight checks passed (3/3)
+            </div>
+            <button id="btn-start-run" class="btn btn-primary" onclick="startSimulatedRun()">
+              Initiate Flow Run →
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT: RUN STATUS PIPELINE CARD -->
+        <div class="card status-card">
+          <div class="card-header">
+            <h2 class="card-title">Run status</h2>
+            <span class="badge badge-ready" id="pipeline-run-badge">○ Ready to Run</span>
+          </div>
+
+          <div class="run-telemetry-banner">
+            <div class="telemetry-item">
+              <span class="telem-label">Run ID</span>
+              <span class="telem-val font-mono" id="telem-run-id">SUB-2026-CL-0842 (Staged)</span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telem-label">Elapsed</span>
+              <span class="telem-val font-mono" id="telem-elapsed">00:00:00</span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telem-label">Assigned Node</span>
+              <span class="telem-val font-mono" id="telem-assigned-node">viya-worker-gpu-03 (Idle)</span>
+            </div>
+          </div>
+
+          <!-- VERTICAL STAGE TIMELINE -->
+          <ul class="pipeline-timeline" aria-label="Pipeline stages">
+            <li class="timeline-step step-queued" id="tl-step-1">
+              <div class="tl-node">○</div>
+              <div class="tl-content">
+                <div class="tl-title-row">
+                  <span class="tl-title">Upload &amp; scan</span>
+                  <span class="tl-status status-queued">○ Ready to trigger</span>
+                </div>
+                <div class="tl-meta">Discharge_Summary_Case1042.pdf (4.2 MB) • ClamAV scan passed</div>
+              </div>
+            </li>
+
+            <li class="timeline-step step-queued" id="tl-step-2">
+              <div class="tl-node">○</div>
+              <div class="tl-content">
+                <div class="tl-title-row">
+                  <span class="tl-title">SDA OCR .flw</span>
+                  <span class="tl-status status-queued">○ Queued</span>
+                </div>
+                <div class="tl-meta">MS Doc Intelligence • Multi-page layout parsing</div>
+              </div>
+            </li>
+
+            <li class="timeline-step step-queued" id="tl-step-3">
+              <div class="tl-node">○</div>
+              <div class="tl-content">
+                <div class="tl-title-row">
+                  <span class="tl-title">HRR extraction .flw</span>
+                  <span class="tl-status status-queued">○ Queued</span>
+                </div>
+                <div class="tl-meta">Extract clinical entities &amp; bounding box coordinates</div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar-fill" id="extract-progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+            </li>
+
+            <li class="timeline-step step-queued" id="tl-step-4">
+              <div class="tl-node">○</div>
+              <div class="tl-content">
+                <div class="tl-title-row">
+                  <span class="tl-title">VLM coding .flw</span>
+                  <span class="tl-status status-queued">○ Queued</span>
+                </div>
+                <div class="tl-meta">ICD-10, SNOMED, &amp; ATC mapping (Step 4 of 5)</div>
+              </div>
+            </li>
+
+            <li class="timeline-step step-waiting" id="tl-step-5">
+              <div class="tl-node">○</div>
+              <div class="tl-content">
+                <div class="tl-title-row">
+                  <span class="tl-title">Ready for review</span>
+                  <span class="tl-status status-waiting">○ Waiting</span>
+                </div>
+                <div class="tl-meta">Awaiting upstream pipeline execution</div>
+              </div>
+            </li>
+          </ul>
+
+          <div class="pipeline-actions-footer">
+            <div class="auto-refresh-indicator" id="pipeline-footer-status">
+              <span class="dot-pulse"></span> Viya API Connected • Awaiting Run Trigger
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: END-TO-END REVIEW WORKSPACE      -->
+    <!-- ========================================== -->
+    <section id="view-review" class="view-screen hidden" aria-labelledby="review-title">
+      
+      <!-- REVIEW HEADER STRIP -->
+      <div class="review-nav-strip">
+        <div class="strip-left">
+          <span class="strip-icon">📄</span>
+          <span class="strip-title">Document Coding Review</span>
+          <span class="strip-sub-id" id="review-sub-id">SUB-2026-CL-0842</span>
+          <span class="strip-facility">Metropolitan Hospital Orthopedic &amp; Trauma Centre</span>
+        </div>
+        <div class="strip-right">
+          <div class="stats-counter-group" id="stats-counter-group">
+            <span class="badge badge-counter" id="badge-total-items">4 Entities</span>
+            <span class="badge badge-success" id="badge-correct-count" title="Audited as Correct">
+              ✓ <strong id="count-correct-val">2</strong> Correct
+            </span>
+            <span class="badge badge-danger" id="badge-incorrect-count" title="Flagged as Incorrect">
+              ✕ <strong id="count-incorrect-val">1</strong> Incorrect
+            </span>
+            <span class="badge badge-warning" id="badge-pending-count" title="Pending clinical sign-off">
+              ⚠ <strong id="count-pending-val">1</strong> Pending
+            </span>
+          </div>
+          <button class="btn btn-ghost" onclick="toggleFallbackHighlightState()" id="btn-toggle-fallback">
+            Toggle Bounding-Box Availability
+          </button>
+        </div>
+      </div>
+
+      <!-- WORKSPACE SPLIT CONTAINER -->
+      <div class="workspace-split-container" id="workspace-splitter">
+        
+        <!-- LEFT: CODING RESULTS & DISPOSITION -->
+        <div class="pane pane-results" id="pane-results">
+          
+          <div class="pane-header">
+            <div>
+              <div class="pane-title-row">
+                <h2 class="pane-title">Results</h2>
+                <div class="results-stats-bar" id="results-stats-bar">
+                  <span class="stat-badge stat-correct" id="stat-correct-pill">
+                    <span class="chip-icon">✓</span> <strong id="stat-correct-num">2</strong> Correct
+                  </span>
+                  <span class="stat-badge stat-incorrect" id="stat-incorrect-pill">
+                    <span class="chip-icon">✕</span> <strong id="stat-incorrect-num">1</strong> Incorrect
+                  </span>
+                  <span class="stat-badge stat-pending" id="stat-pending-pill">
+                    <span class="chip-icon">⚠</span> <strong id="stat-pending-num">1</strong> Pending
+                  </span>
+                </div>
+              </div>
+              <p class="pane-sub">Review clinical extraction entities and verified ontology codes</p>
+            </div>
+            <div class="table-quick-filters">
+              <button class="filter-pill active" onclick="filterTableByStandard('ALL', this)">All (4)</button>
+              <button class="filter-pill" onclick="filterTableByStandard('ICD-10', this)">ICD-10 (2)</button>
+              <button class="filter-pill" onclick="filterTableByStandard('SNOMED', this)">SNOMED (1)</button>
+              <button class="filter-pill" onclick="filterTableByStandard('ATC', this)">ATC (1)</button>
+            </div>
+          </div>
+
+          <!-- UNSAVED CHANGES ALERT BANNER -->
+          <div id="unsaved-banner" class="alert-banner warning hidden" role="alert">
+            <div class="alert-content">
+              <span class="alert-icon">⚠</span>
+              <span><strong>Unsaved reviewer change</strong> on <span id="unsaved-doc-id">DOC-001</span>. Please commit your decision before switching rows.</span>
+            </div>
+            <div class="alert-actions">
+              <button class="btn btn-xs btn-ghost" onclick="discardUnsavedChanges()">Discard</button>
+              <button class="btn btn-xs btn-primary" onclick="saveActiveDecision()">Save Now</button>
+            </div>
+          </div>
+
+          <!-- RESULTS TABLE -->
+          <div class="table-responsive">
+            <table class="clinical-table" id="results-table" aria-label="Extracted clinical results">
+              <thead>
+                <tr>
+                  <th scope="col" style="width: 14%;">DOCUMENT ID</th>
+                  <th scope="col" style="width: 20%;">KEY</th>
+                  <th scope="col" style="width: 26%;">VALUE</th>
+                  <th scope="col" style="width: 14%;">CODE TYPE</th>
+                  <th scope="col" style="width: 13%;">CODE</th>
+                  <th scope="col" style="width: 13%;">DECISION</th>
+                </tr>
+              </thead>
+              <tbody id="results-tbody">
+                <!-- ROW 1 (Active) -->
+                <tr class="table-row active" id="row-0" onclick="selectRow(0)" tabindex="0">
+                  <td class="font-mono">DOC-001</td>
+                  <td>Medical Problem</td>
+                  <td class="cell-highlighted">
+                    <span class="text-match">osteoarthritis</span>
+                  </td>
+                  <td><span class="standard-pill icd">ICD-10</span></td>
+                  <td class="font-mono font-bold">M17.11</td>
+                  <td><span class="decision-chip pending" id="chip-0"><span class="chip-icon">⚠</span> Pending</span></td>
+                </tr>
+
+                <!-- ROW 2 -->
+                <tr class="table-row" id="row-1" onclick="selectRow(1)" tabindex="0">
+                  <td class="font-mono">DOC-001</td>
+                  <td>Procedure</td>
+                  <td class="cell-highlighted">
+                    <span class="text-match">total knee arthroplasty</span>
+                  </td>
+                  <td><span class="standard-pill snomed">SNOMED</span></td>
+                  <td class="font-mono font-bold">609588000</td>
+                  <td><span class="decision-chip correct" id="chip-1"><span class="chip-icon">✓</span> Correct</span></td>
+                </tr>
+
+                <!-- ROW 3 -->
+                <tr class="table-row" id="row-2" onclick="selectRow(2)" tabindex="0">
+                  <td class="font-mono">DOC-002</td>
+                  <td>Medication</td>
+                  <td class="cell-highlighted">
+                    <span class="text-match">metformin 500 mg</span>
+                  </td>
+                  <td><span class="standard-pill atc">ATC</span></td>
+                  <td class="font-mono font-bold">A10BA02</td>
+                  <td><span class="decision-chip incorrect" id="chip-2"><span class="chip-icon">✕</span> Incorrect</span></td>
+                </tr>
+
+                <!-- ROW 4 -->
+                <tr class="table-row" id="row-3" onclick="selectRow(3)" tabindex="0">
+                  <td class="font-mono">DOC-001</td>
+                  <td>Diagnosis</td>
+                  <td class="cell-highlighted">
+                    <span class="text-match">Type 2 Diabetes</span>
+                  </td>
+                  <td><span class="standard-pill icd">ICD-10</span></td>
+                  <td class="font-mono font-bold">E11.9</td>
+                  <td><span class="decision-chip correct" id="chip-3"><span class="chip-icon">✓</span> Correct</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SELECTION DETAILS & DISPOSITION CARD -->
+          <div class="card selection-card" id="selection-card">
+            <!-- PROVENANCE METADATA HEADER -->
+            <div class="selection-provenance-bar">
+              <span class="prov-tag">Selection details</span>
+              <span class="prov-sep">•</span>
+              <span id="meta-offsets">Offset 14,203–14,228</span>
+              <span class="prov-sep">•</span>
+              <span id="meta-page">Page 37 of 52</span>
+              <span class="prov-sep">•</span>
+              <span id="meta-conf">Confidence: <strong>0.94</strong></span>
+              <span class="prov-sep">•</span>
+              <span class="font-mono text-muted" id="meta-cid">CID: #CID-8924-VIYA-SDA</span>
+            </div>
+
+            <!-- DECISION ACTION ROW -->
+            <div class="selection-controls-row">
+              <button id="btn-decision-correct" class="btn btn-outline-success" onclick="markDecision('Correct')" title="Shortcut: Press 1">
+                <span class="btn-icon-symbol">✓</span> Correct <kbd class="key-tag">1</kbd>
+              </button>
+
+              <button id="btn-decision-incorrect" class="btn btn-outline-danger" onclick="markDecision('Incorrect')" title="Shortcut: Press 2">
+                <span class="btn-icon-symbol">✕</span> Incorrect <kbd class="key-tag">2</kbd>
+              </button>
+
+              <div class="comment-input-wrapper">
+                <input type="text" id="reviewer-comment" class="text-input" placeholder="Add mandatory comment or rationale..." oninput="handleCommentInput()">
+              </div>
+
+              <button id="btn-save-decision" class="btn btn-navy" onclick="saveActiveDecision()" title="Shortcut: Ctrl+Enter">
+                Save decision <kbd class="key-tag-light">Ctrl+↵</kbd>
+              </button>
+            </div>
+
+            <!-- EXPANDABLE OVERRIDE FIELDS (SHOWN WHEN INCORRECT IS CLICKED) -->
+            <div id="correction-drawer" class="correction-drawer hidden">
+              <div class="drawer-grid">
+                <div class="drawer-field">
+                  <label for="select-incorrect-reason" class="drawer-label">Reason for override:</label>
+                  <select id="select-incorrect-reason" class="select-input" onchange="markUnsaved()">
+                    <option value="specificity">Wrong code specificity (lateral vs bilateral)</option>
+                    <option value="negation">Negated condition (ruled out in history)</option>
+                    <option value="historical">Historical condition (past medical history only)</option>
+                    <option value="guideline">Alternative institutional coding guideline applies</option>
+                    <option value="evidence">Insufficient clinical documentation</option>
+                  </select>
+                </div>
+
+                <div class="drawer-field">
+                  <label for="input-search-replacement" class="drawer-label">Search replacement code (ICD-10 / SNOMED):</label>
+                  <div class="autocomplete-wrapper">
+                    <input type="text" id="input-search-replacement" class="text-input" placeholder="Type diagnosis (e.g. M17.12, Knee...)" oninput="filterCodeSuggestions(this.value)">
+                    <div id="code-suggestions" class="suggestions-dropdown hidden"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- RIGHT: BOOKMARKED PDF EVIDENCE VIEWER -->
+        <div class="pane pane-pdf" id="pane-pdf">
+          
+          <div class="pdf-toolbar">
+            <div class="pdf-toolbar-left">
+              <h2 class="pane-title">Bookmarked PDF</h2>
+              <span class="pdf-doc-name" id="pdf-doc-title">Page 37 of 52 • Discharge_Summary_Case1042.pdf</span>
+            </div>
+            
+            <div class="pdf-controls">
+              <div class="zoom-pill-group">
+                <button class="btn-zoom" onclick="zoomPdf(-10)" title="Zoom Out">−</button>
+                <span class="zoom-level" id="zoom-text">100%</span>
+                <button class="btn-zoom" onclick="zoomPdf(10)" title="Zoom In">+</button>
+                <button class="btn-zoom-fit" onclick="resetZoom()">Fit</button>
+              </div>
+              <button class="btn-icon-subtle" title="Download Source PDF (TLS Encrypted)" onclick="alert('Downloading verified PDF artifact from Viya secure store...')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- FALLBACK HIGHLIGHT ALERT BANNER -->
+          <div id="highlight-fallback-alert" class="alert-banner info hidden" role="status">
+            <span class="alert-icon">ℹ</span>
+            <span>The source page is available, but an exact bounding box highlight could not be rendered for these coordinates. Full page displayed below.</span>
+          </div>
+
+          <!-- PDF VIEWPORT CANVAS -->
+          <div class="pdf-viewport-container" id="pdf-viewport">
+            
+            <!-- THUMBNAIL RAIL -->
+            <aside class="pdf-thumbnail-rail" aria-label="Page thumbnails">
+              <div class="thumb-card" id="thumb-35" onclick="jumpToPage(35)" title="Jump to Page 35">
+                <span class="thumb-num">P. 35</span>
+                <div class="thumb-preview"></div>
+              </div>
+              <div class="thumb-card" id="thumb-36" onclick="jumpToPage(36)" title="Jump to Page 36">
+                <span class="thumb-num">P. 36</span>
+                <div class="thumb-preview"></div>
+              </div>
+              <div class="thumb-card active" id="thumb-37" onclick="jumpToPage(37)" title="Jump to Page 37 (Active Page)">
+                <span class="thumb-num">P. 37</span>
+                <div class="thumb-badge">3</div>
+                <div class="thumb-preview highlighted"></div>
+              </div>
+              <div class="thumb-card" id="thumb-38" onclick="jumpToPage(38)" title="Jump to Page 38">
+                <span class="thumb-num">P. 38</span>
+                <div class="thumb-badge" style="background: #d97706;">1</div>
+                <div class="thumb-preview"></div>
+              </div>
+            </aside>
+
+            <!-- RENDERED DOCUMENT SHEET -->
+            <div class="pdf-document-page" id="document-canvas">
+              
+              <!-- DYNAMIC ANIMATED BOUNDING BOX OVERLAY -->
+              <div id="active-bounding-box-indicator" class="active-bounding-box-indicator" aria-hidden="true">
+                <span class="bbox-tag" id="bbox-tag">
+                  <span class="tag-pulse-dot"></span>
+                  <span id="bbox-tag-text">Evidence Match : ICD-10 M17.11 (94% Conf)</span>
+                </span>
+                <div class="bbox-corner top-left"></div>
+                <div class="bbox-corner top-right"></div>
+                <div class="bbox-corner bottom-left"></div>
+                <div class="bbox-corner bottom-right"></div>
+              </div>
+
+              <!-- PAGE 37 CONTENT -->
+              <div class="doc-page-section" id="doc-page-37">
+                <div class="doc-paper-header">
+                  <div class="doc-gov-title">DEPARTMENT OF CLINICAL INFORMATICS &amp; GOVERNANCE</div>
+                  <div class="doc-hospital-name">Metropolitan Hospital Orthopedic &amp; Trauma Centre</div>
+                  <div class="doc-meta-row">
+                    <span><strong>Patient:</strong> [De-identified Patient Record]</span>
+                    <span><strong>MRN:</strong> 984021884</span>
+                    <span><strong>Adm:</strong> 14-Jan-2026</span>
+                    <span><strong>Disch:</strong> 22-Jan-2026</span>
+                  </div>
+                </div>
+
+                <div class="doc-divider"></div>
+
+                <div class="doc-section-header">
+                  <span class="doc-section-title">1. PRINCIPAL CLINICAL ASSESSMENT &amp; DIAGNOSIS</span>
+                  <span class="doc-standard-tag">ICD-10 ACCREDITED</span>
+                </div>
+                <p class="doc-paragraph">
+                  The patient was admitted electively following protracted chronic joint pain refractory to conservative pharmacotherapy and intra-articular steroid injections. Preoperative radiological assessment confirmed severe right knee <span class="finding-target active-target" id="finding-target-0" data-finding-index="0" data-standard="ICD-10" onclick="selectRow(0)" title="Click finding: osteoarthritis (ICD-10 M17.11)">osteoarthritis</span> with obliteration of the medial joint space, significant subchondral sclerosis, and marginal osteophytosis.
+                </p>
+
+                <div class="doc-section-header">
+                  <span class="doc-section-title">2. SURGICAL INTERVENTIONS PERFORMED</span>
+                  <span class="doc-standard-tag">SNOMED CODED</span>
+                </div>
+                <p class="doc-paragraph">
+                  On 18-Jan-2026, the patient underwent an uncomplicated right <span class="finding-target" id="finding-target-1" data-finding-index="1" data-standard="SNOMED" onclick="selectRow(1)" title="Click finding: total knee arthroplasty (SNOMED 609588000)">total knee arthroplasty</span> using a cemented posterior-stabilized prosthesis under spinal anesthesia. Tourniquet time: 54 minutes. Estimated blood loss: 120 mL. Postoperative neurovascular status of the right lower extremity remained fully intact throughout recovery.
+                </p>
+
+                <div class="doc-section-header">
+                  <span class="doc-section-title">3. SECONDARY COMORBIDITIES &amp; PHARMACOTHERAPY</span>
+                  <span class="doc-standard-tag">ICD-10 / ATC</span>
+                </div>
+                <p class="doc-paragraph">
+                  • Known history of 
+                  <span class="finding-target" id="finding-target-3" data-finding-index="3" data-standard="ICD-10" onclick="selectRow(3)" title="Click finding: Type 2 Diabetes (ICD-10 E11.9)">
+                    Type 2 Diabetes
+                  </span>
+                  mellitus on oral hypoglycaemic maintenance.
+                </p>
+              </div>
+
+              <!-- PAGE BREAK TO PAGE 38 -->
+              <div class="doc-page-break" id="page-break-38">
+                <span class="page-break-badge">PAGE 38 OF 52</span>
+                <span class="page-break-label">Discharge Medications &amp; Outpatient Plan</span>
+              </div>
+
+              <!-- PAGE 38 CONTENT -->
+              <div class="doc-page-section" id="doc-page-38">
+                <p class="doc-paragraph">
+                  • Discharge medication resumed: 
+                  <span class="finding-target" id="finding-target-2" data-finding-index="2" data-standard="ATC" onclick="selectRow(2)" title="Click finding: Metformin 500 mg (ATC A10BA02)">
+                    Metformin 500 mg
+                  </span>
+                  PO BID with meals. Enoxaparin 40 mg SC daily prescribed for thromboprophylaxis for 14 days.
+                </p>
+
+                <div class="doc-section-header">
+                  <span class="doc-section-title">4. DISCHARGE PLAN &amp; REHABILITATION</span>
+                </div>
+                <p class="doc-paragraph">
+                  Patient mobilized successfully with frame assistance under physical therapy supervision. Surgical incision clean and dry with intact staples. Outpatient orthopedic review scheduled at 2 weeks in Clinic 4.
+                </p>
+
+                <div class="doc-signature-block">
+                  <div class="sig-line">Digitally Authenticated by Board of Clinical Coding &amp; Governance</div>
+                  <div class="sig-details">Attending Orthopedic Surgeon: Lead Consultant Surgeon, MD, FRCS (Ortho)</div>
+                  <div class="sig-pki">PKI SHA-256: 8a4c10df9e24b7a1e058299c • Timestamp: 2026-01-22 14:32 UTC</div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- PDF FOOTER STATUS -->
+          <div class="pdf-footer-bar">
+            <div class="pdf-footer-coords font-mono">
+              <span id="coord-info">Bounding Box: [Page: 37, X: 142, Y: 380, W: 210, H: 24]</span>
+              <span class="coord-sep">•</span>
+              <span>Resolution: 300 DPI OCR</span>
+            </div>
+            <div class="pdf-footer-security">
+              <span class="badge badge-success">✓ Provenance Audited</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- KEYBOARD SHORTCUTS MODAL -->
+  <div id="shortcuts-modal" class="modal-backdrop hidden" onclick="closeShortcutsModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="modal-title">Accessible Keyboard Shortcuts</h3>
+        <button class="btn-close" onclick="closeShortcutsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcut-list">
+          <div class="shortcut-row"><kbd>1</kbd> <span>Mark selected record as <strong>Correct</strong></span></div>
+          <div class="shortcut-row"><kbd>2</kbd> <span>Mark selected record as <strong>Incorrect</strong></span></div>
+          <div class="shortcut-row"><kbd>Ctrl + Enter</kbd> <span>Save reviewer decision and commit</span></div>
+          <div class="shortcut-row"><kbd>↑ / ↓</kbd> <span>Navigate through extraction table rows</span></div>
+          <div class="shortcut-row"><kbd>Esc</kbd> <span>Close active modal or discard selection</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-navy" onclick="closeShortcutsModal()">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNSAVED CONFIRMATION MODAL -->
+  <div id="unsaved-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Unsaved Review Decision</h3>
+      </div>
+      <div class="modal-body">
+        <p>You have unsaved review decisions for this clinical record. If you switch rows now without saving, these modifications will be discarded.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cancelRowSwitch()">Continue Editing</button>
+        <button class="btn btn-outline-danger" onclick="confirmDiscardAndSwitch()">Discard Changes</button>
+        <button class="btn btn-navy" onclick="saveAndProceed()">Save &amp; Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
